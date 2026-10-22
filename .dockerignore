@@ -1,0 +1,8 @@
+.git
+.env
+*.log
+data
+floci-go-webapp
+frontend/node_modules
+frontend/dist
+backend/backend

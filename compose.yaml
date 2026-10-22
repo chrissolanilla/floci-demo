@@ -1,0 +1,44 @@
+name: floci-demo
+
+services:
+  floci:
+    image: floci/floci:2.3.0
+    user: root
+    ports:
+      - "127.0.0.1:4566:4566"
+      - "127.0.0.1:${DB_PORT}:${DB_PORT}"
+    environment:
+      FLOCI_STORAGE_MODE: persistent
+      FLOCI_STORAGE_PERSISTENT_PATH: /data
+      FLOCI_DOCKER_RESOURCE_NAMESPACE: one-image
+      FLOCI_DEFAULT_REGION: ${AWS_REGION}
+      FLOCI_SERVICES_RDS_PROXY_BASE_PORT: ${DB_PORT}
+      FLOCI_SERVICES_RDS_PROXY_MAX_PORT: ${DB_PORT}
+      FLOCI_SERVICES_RDS_DEFAULT_POSTGRES_IMAGE: postgres:16-alpine
+      FLOCI_SERVICES_EC2_MOCK: "true"
+      FLOCI_SERVICES_UI_BIND_ADDRESS: 127.0.0.1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - floci-data:/data
+
+  app:
+    build: .
+    env_file: .env
+    ports:
+      - "127.0.0.1:${BACKEND_PORT}:${BACKEND_PORT}"
+    environment:
+      DB_HOST: floci
+      AWS_ENDPOINT_URL: http://floci:4566
+      LOG_PATH: /data/app.log
+      FRONTEND_DIST: /frontend/dist
+    volumes:
+      - ebs-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:$${BACKEND_PORT}/api/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  floci-data:
+  ebs-data:
