@@ -207,22 +207,23 @@ onMounted(loadUser);
 					Username: 3-24 characters, password: 8-72 bytes(whatever u want bro)
 				</small>
 
-				<button v-if="mode === 'signup'" :disabled="busy">
+				<button class="text-button" v-if="mode === 'signup'" :disabled="busy">
 					Create account
 				</button>
 				<button v-else :disabled="busy">
 					Sign in
 				</button>
+
+				<button class="text-button" :disabled="busy" @click="switchMode">
+					<span v-if="mode === 'signup'">
+						Already have an account? Sign in
+					</span>
+					<span v-else>
+						New here? Create an account
+					</span>
+				</button>
 			</form>
 
-			<button class="text-button" :disabled="busy" @click="switchMode">
-				<span v-if="mode === 'signup'">
-					Already have an account? Sign in
-				</span>
-				<span v-else>
-					New here? Create an account
-				</span>
-			</button>
 		</section>
 
 		<section v-else class="card">
@@ -272,8 +273,29 @@ onMounted(loadUser);
 </template>
 
 <style scoped>
+main {
+	--special_var: calc(((268 / 300) * 100) * 1vw);
+	display: flex;
+	padding: 0.25rem;
+	margin: 0.25rem;
+	flex-direction: column;
+	justify-content: center;
+	text-align: center;
+}
+label{
+	text-align:left;
+}
 form {
 	display: flex;
 	flex-direction: column;
+}
+
+
+.text-button {
+	margin: 0.25rem;
+	width: clamp(1rem, var(--special_var), 30rem);
+	height: auto;
+	margin-left: auto;
+	margin-right: auto;
 }
 </style>

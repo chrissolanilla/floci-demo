@@ -51,6 +51,42 @@ func ec2(args ...string) string {
 	return aws("ec2", args...)
 }
 
+func provisionHTTPAccess() {
+	group := ec2(
+		"describe-security-groups",
+		"--filters",
+		"Name=group-name,Values=default",
+		"--query",
+		"SecurityGroups[0].GroupId",
+		"--output", "text",
+	)
+
+	if group == "" || group == "None" {
+		log.Fatal("default security group not found")
+	}
+
+	// Check whether TCP port 8080 is already allowed.
+	existing := ec2(
+		"describe-security-groups",
+		"--group-ids", group,
+		"--query",
+		"SecurityGroups[0].IpPermissions[?IpProtocol=='tcp' && FromPort==`8080` && ToPort==`8080`].IpRanges[].CidrIp",
+		"--output", "text",
+	)
+
+	if !strings.Contains(existing, "0.0.0.0/0") {
+		ec2(
+			"authorize-security-group-ingress",
+			"--group-id", group,
+			"--protocol", "tcp",
+			"--port", "8080",
+			"--cidr", "0.0.0.0/0",
+		)
+	}
+
+	log.Println("HTTP port 8080 allowed")
+}
+
 //create our bucket if it doesnt exist already
 func provisionBucket() {
 	bucket := setting("S3_BUCKET")
@@ -148,7 +184,8 @@ func provisionInstance() string {
 		"--output", "text",
 	)
 
-	if instance == "" {
+	if instance == "" || instance == "None" {
+	// if instance == "" {
 		instance = ec2(
 			"run-instances",
 			"--image-id", "ami-alpine",
@@ -173,8 +210,12 @@ func provisionInstance() string {
 	)
 
 	if state == "stopped" {
+		log.Printf("starting stopped EC2 instance: %s", instance)
 		ec2("start-instances", "--instance-ids", instance)
+		log.Printf("start request completed for EC2: %s", instance)
 	}
+
+	log.Printf("waiting for EC2 %s to become running...", instance)
 
 	//wait until our instance is running
 	ec2(
@@ -269,6 +310,8 @@ func main() {
 	provisionDatabase()
 	instance := provisionInstance()
 	volume := provisionVolume(instance)
+
+	provisionHTTPAccess()
 
 	log.Printf("provisioning complete: EC2 %s, EBS %s", instance, volume)
 }

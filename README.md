@@ -32,7 +32,14 @@ bash start.sh
 
 This starts Floci, provisions the AWS resources, and runs the app through Docker Compose.
 
-The app uses S3 for images and RDS/PostgreSQL for accounts and sessions. EC2 and EBS are also provisioned to demonstrate those services, but the app itself runs in Docker.
+If you ever run into errors, try running 
+```bash
+`./clean_containers`
+```
+
+The app uses S3 for images and RDS/PostgreSQL for accounts and sessions. The app will run the dist build of the frontend and the static binary on the EC2 and the EBS.
+
+When you run it with floci, you can view the app on localhost:30000
 
 All configuration is in the root `.env` file.
 

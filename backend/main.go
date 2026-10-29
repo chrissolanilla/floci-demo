@@ -19,6 +19,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
@@ -115,8 +116,14 @@ func run() error {
 		return err
 	}
 
+	// s3Client := s3.NewFromConfig(awsConfig, func(options *s3.Options) {
+	// 	options.UsePathStyle = true
+	// })
 	s3Client := s3.NewFromConfig(awsConfig, func(options *s3.Options) {
 		options.UsePathStyle = true
+		if endpoint := os.Getenv("AWS_ENDPOINT_URL"); endpoint != "" {
+			options.BaseEndpoint = &endpoint
+		}
 	})
 
 	a := &app{
@@ -214,10 +221,18 @@ func (a *app) routes() http.Handler {
 func (a *app) health(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
-
-	err := a.db.PingContext(ctx)
-	if err != nil {
+	if err := a.db.PingContext(ctx); err != nil {
 		fail(w, http.StatusServiceUnavailable, "database unavailable")
+		return
+	}
+
+	_, err := a.s3.HeadBucket(ctx, &s3.HeadBucketInput{
+		Bucket: aws.String(a.bucket),
+	})
+
+	if err != nil {
+		log.Printf("S3 health check failed: %v", err)
+		fail(w, http.StatusServiceUnavailable, "storage unavailable")
 		return
 	}
 

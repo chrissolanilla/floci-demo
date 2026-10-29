@@ -15,7 +15,7 @@ services:
       FLOCI_SERVICES_RDS_PROXY_BASE_PORT: ${DB_PORT}
       FLOCI_SERVICES_RDS_PROXY_MAX_PORT: ${DB_PORT}
       FLOCI_SERVICES_RDS_DEFAULT_POSTGRES_IMAGE: postgres:16-alpine
-      FLOCI_SERVICES_EC2_MOCK: "true"
+      FLOCI_SERVICES_EC2_MOCK: "false"
       FLOCI_SERVICES_UI_BIND_ADDRESS: 127.0.0.1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
