@@ -204,7 +204,7 @@ onMounted(loadUser);
 				>
 
 				<small>
-					Username: 3-24 characters, password: 8-72 bytes
+					Username: 3-24 characters, password: 8-72 bytes(whatever u want bro)
 				</small>
 
 				<button v-if="mode === 'signup'" :disabled="busy">

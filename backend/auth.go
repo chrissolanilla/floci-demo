@@ -39,6 +39,9 @@ func readCredentials(w http.ResponseWriter, r *http.Request) (credentials, bool)
 		return account, false
 	}
 
+	//need to update err var or else i will get the "send single json object" err
+	err = decoder.Decode(&struct{}{})
+
 	if err != io.EOF {
 		fail(w, http.StatusBadRequest, "send a single JSON object")
 		return account, false
