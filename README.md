@@ -34,6 +34,8 @@ bash start.sh
 
 This starts Floci, provisions the AWS resources, and runs the app through Docker Compose.
 
+You can see a Floci Console view by navigating to http://localhost:4566/_floci/ui
+
 If you ever run into errors, try running
 ```bash
 `./clean_containers`
@@ -48,5 +50,5 @@ All configuration is in the root `.env` file.
 To stop:
 
 ```bash
-docker compose down
+docker compose down -v
 ```
