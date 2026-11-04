@@ -12,7 +12,7 @@ import (
 	"github.com/aws/jsii-runtime-go"
 )
 
-//amzon linux 2023 ami
+// amzon linux 2023 ami
 const amiString = "ami-0abcdef1234567891"
 
 func setting(key string) *string {
@@ -25,8 +25,7 @@ func setting(key string) *string {
 	return jsii.String(value)
 }
 
-
-//all of the create functions are more so for readabiltiy, make the main function smaller
+// all of the create functions are more so for readabiltiy, make the main function smaller
 func createBucket(awsStack awscdk.Stack) awss3.Bucket {
 	return awss3.NewBucket(
 		awsStack,
@@ -200,7 +199,7 @@ func createDatabase(
 			Engine:        jsii.String("postgres"),
 			EngineVersion: jsii.String("16"),
 
-			MasterUsername:     setting("DB_USER"),
+			MasterUsername: setting("DB_USER"),
 			//PROBABLY DONT DO THIS IN ACTUAL IMPORTANT ENVS but this is just a ddemo
 			MasterUserPassword: setting("DB_PASSWORD"),
 
@@ -219,7 +218,7 @@ func createDatabase(
 	)
 }
 
-//THIS is so that start.sh can read the outputs and emulate
+// THIS is so that start.sh can read the outputs and emulate
 func createOutputs(
 	awsStack awscdk.Stack,
 	bucket awss3.Bucket,
@@ -295,7 +294,7 @@ func main() {
 	}
 
 	stackProps := &awscdk.StackProps{
-		Env: environment,
+		Env:         environment,
 		Synthesizer: awscdk.NewBootstraplessSynthesizer(nil),
 	}
 
