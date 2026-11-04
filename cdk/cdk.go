@@ -12,6 +12,7 @@ import (
 	"github.com/aws/jsii-runtime-go"
 )
 
+//amzon linux 2023 ami
 const amiString = "ami-0abcdef1234567891"
 
 func setting(key string) *string {
