@@ -1,21 +1,64 @@
+#!/usr/bin/env bash
 set -euo pipefail
 
 cd "$(dirname "$0")"
 
-for tool in docker floci aws go curl npm; do
+for tool in docker floci aws go curl npm cdk; do
     if ! command -v "$tool" >/dev/null 2>&1; then
         echo "Missing required tool: $tool" >&2
         exit 1
     fi
 done
 
+#this allows floci to hijack aws cli so they dont actually go to aws and instead go to local floci containers
 eval "$(floci env --host localhost)"
 
 set -a
 source .env
 set +a
 
+export AWS_REGION="us-east-1"
+export AWS_DEFAULT_REGION="$AWS_REGION"
+
+#alwayss dummy creds
+export AWS_ACCESS_KEY_ID="test"
+export AWS_SECRET_ACCESS_KEY="test"
+
+export AWS_EC2_METADATA_DISABLED=true
 export AWS_PAGER=""
+
+#never allow deployment to real AWS
+case "${AWS_ENDPOINT_URL:-}" in
+    http://localhost:4566|http://127.0.0.1:4566)
+        ;;
+    *)
+        echo "ERROR: Refusing to deploy to non-local AWS endpoint." >&2
+        echo "AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL:-unset}" >&2
+        exit 1
+        ;;
+esac
+
+required_vars=(
+    AWS_REGION
+    AWS_ENDPOINT_URL
+    S3_BUCKET
+    DB_INSTANCE
+    DB_PORT
+    DB_USER
+    DB_PASSWORD
+    DB_NAME
+)
+
+for var in "${required_vars[@]}"; do
+    if [[ -z "${!var:-}" ]]; then
+        echo "ERROR: Missing required variable: $var" >&2
+        exit 1
+    fi
+done
+
+echo "AWS region: $AWS_REGION"
+echo "AWS endpoint: $AWS_ENDPOINT_URL"
+echo "Environment configured successfully."
 
 docker compose up -d floci
 
@@ -34,15 +77,33 @@ for attempt in {1..60}; do
     sleep 1
 done
 
-go run scripts/provision.go
+echo "Synthesizing CDK infrastructure..."
+#parenthiss creates a subshell so its important
+(
+    cd cdk
+    cdk synth FlociDemoStack --quiet
+)
+
+echo "Deploying CloudFormation stack to Floci..."
+aws \
+    --endpoint-url "$AWS_ENDPOINT_URL" \
+    --region "$AWS_REGION" \
+    cloudformation deploy \
+    --template-file cdk/cdk.out/FlociDemoStack.template.json \
+    --stack-name FlociDemoStack \
+    --capabilities CAPABILITY_IAM \
+    --no-fail-on-empty-changeset
+
+echo "CDK infrastructure deployed!"
 
 DB_HOST=$(aws \
     --endpoint-url "$AWS_ENDPOINT_URL" \
     --region "$AWS_REGION" \
-    rds describe-db-instances \
-    --db-instance-identifier "$DB_INSTANCE" \
-    --query "DBInstances[0].Endpoint.Address" \
+    cloudformation describe-stacks \
+    --stack-name FlociDemoStack \
+    --query "Stacks[0].Outputs[?OutputKey=='DatabaseEndpoint'].OutputValue | [0]" \
     --output text)
+
 
 if [[ -z "$DB_HOST" || "$DB_HOST" == "None" ]]; then
     echo "Failed to find RDS endpoint" >&2
@@ -51,25 +112,39 @@ fi
 
 echo "RDS endpoint: $DB_HOST"
 
-#find ec2
+echo "Waiting for PostgreSQL..."
+
+#rds wait instace avail?
+aws \
+    --endpoint-url "$AWS_ENDPOINT_URL" \
+    --region "$AWS_REGION" \
+    rds wait db-instance-available \
+    --db-instance-identifier "$DB_INSTANCE"
+
+#get the instance and verifiy it(floci can only accept some instances, not real actual amis?)
 instance=$(aws \
     --endpoint-url "$AWS_ENDPOINT_URL" \
     --region "$AWS_REGION" \
-    ec2 describe-instances \
-    --filters \
-        "Name=tag:Name,Values=floci-demo-app" \
-        "Name=instance-state-name,Values=running" \
-    --query "Reservations[].Instances[].InstanceId" \
+    cloudformation describe-stacks \
+    --stack-name FlociDemoStack \
+    --query "Stacks[0].Outputs[?OutputKey=='InstanceId'].OutputValue | [0]" \
     --output text)
 
-if [[ -z "$instance" || "$instance" == *$'\t'* ]]; then
-    echo "Expected exactly one running EC2 instance, got: $instance" >&2
+if [[ -z "$instance" || "$instance" == "None" || "$instance" == *$'\t'* ]]; then
+    echo "Invalid EC2 instance ID: $instance" >&2
     exit 1
 fi
 
+aws \
+    --endpoint-url "$AWS_ENDPOINT_URL" \
+    --region "$AWS_REGION" \
+    ec2 wait instance-running \
+    --instance-ids "$instance"
+
+#find containers
 echo "EC2 instance: $instance"
 
-#find floci containers
+#find Floci EC2 container
 container=$(docker ps -q \
     --filter "label=io.floci.service=ec2" \
     --filter "label=io.floci.resource-id=$instance")
@@ -80,18 +155,31 @@ if [[ -z "$container" ]]; then
     exit 1
 fi
 
+if [[ "$container" == *$'\n'* ]]; then
+    echo "Multiple EC2 containers found for $instance" >&2
+    exit 1
+fi
+
+echo "EC2 container: $container"
+
 #we need to connect to vpc network
 vpc_network=$(docker inspect "$container" \
     --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' |
-    grep 'floci-aws-.*-vpc-' |
-    head -n 1)
+    grep -m 1 'floci-aws-.*-vpc-' || true)
 
 if [[ -z "$vpc_network" ]]; then
     echo "EC2 VPC network not found" >&2
     exit 1
 fi
 
-floci_ip=$(docker inspect floci-demo-floci-1 \
+floci_container=$(docker compose ps -q floci)
+
+if [[ -z "$floci_container" ]]; then
+    echo "Floci container not found" >&2
+    exit 1
+fi
+
+floci_ip=$(docker inspect "$floci_container" \
     --format "{{with index .NetworkSettings.Networks \"$vpc_network\"}}{{.IPAddress}}{{end}}")
 
 if [[ -z "$floci_ip" ]]; then
@@ -103,12 +191,16 @@ ec2_aws_endpoint="http://$floci_ip:4566"
 
 echo "EC2 AWS endpoint: $ec2_aws_endpoint"
 
-#incase we get weird errors
-docker exec "$container" \
-    wget -qO /dev/null "$ec2_aws_endpoint/_localstack/health" || {
-        echo "EC2 cannot reach Floci" >&2
-        exit 1
-    }
+#incase we get weird errors, this image dosent have wget so
+echo "Checking EC2 connectivity to Floci..."
+
+if docker exec "$container" sh -c 'command -v curl >/dev/null 2>&1'; then
+    docker exec "$container" \
+        curl -fsS -o /dev/null "$ec2_aws_endpoint/_localstack/health"
+else
+    echo "curl is not installed in the EC2 container." >&2
+    exit 1
+fi
 
 #build frontend
 echo "Building frontend..."
@@ -174,13 +266,14 @@ docker exec -d \
     "$container" \
     /opt/app/server
 
+
 echo "Checking backend..."
 
 healthy=false
 
 for attempt in {1..15}; do
     if docker exec "$container" \
-        wget -qO- http://127.0.0.1:8080/api/health \
+        curl -fsS http://127.0.0.1:8080/api/health \
         >/dev/null 2>&1; then
 
         healthy=true
@@ -200,3 +293,4 @@ if [[ "$healthy" != true ]]; then
 fi
 
 echo "Application running inside EC2: $instance"
+echo "Check localhost:30000"
