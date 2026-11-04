@@ -4,6 +4,8 @@ A simple Vue frontend and Go backend where users can create an account, log in, 
 
 The point is to demonstrate how [Floci](https://floci.io/floci/) can be used to test AWS deployments locally without using real AWS resources.
 
+It is also a good example of how to define the infrastructure as code via AWS CDK in Go.
+
 `start.sh` starts Floci and runs `provision.go`, which creates the local S3, RDS, EC2, and EBS resources. The rest is just a normal Go web app.
 
 ## Run locally
@@ -22,7 +24,7 @@ npm run dev
 
 ## Run with Floci
 
-Requires Docker, AWS CLI, Go, and [Floci CLI](https://github.com/floci-io/floci-cli)
+Requires Docker, AWS CLI, AWS CDK CLI, Go, and [Floci CLI](https://github.com/floci-io/floci-cli)
 
 From the project root:
 
@@ -32,7 +34,7 @@ bash start.sh
 
 This starts Floci, provisions the AWS resources, and runs the app through Docker Compose.
 
-If you ever run into errors, try running 
+If you ever run into errors, try running
 ```bash
 `./clean_containers`
 ```
